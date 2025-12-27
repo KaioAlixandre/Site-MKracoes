@@ -13,7 +13,7 @@ const getStatusInPortuguese = (status: string) => {
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, ShoppingCart, Package, Users, Settings, LogOut, Plus, Truck, Sprout, X, ChefHat
+  LayoutDashboard, ShoppingCart, Package, Users, Settings, LogOut, Truck, Store, X
 } from 'lucide-react';
 import apiService from '../../services/api';
 import { Product, ProductCategory, User, Order } from '../../types';
@@ -24,18 +24,14 @@ import Produtos from './Produtos';
 import Clientes from './Clientes';
 import Configuracoes from './Configuracoes';
 import Entregadores from './Entregadores';
-import Complementos from './Complementos';
-import Cozinheiros from './Cozinheiros';
 import ModalSelecaoEntregador from './components/ModalSelecaoEntregador';
 
 const pages = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard /> },
   { id: 'pedidos', label: 'Pedidos', icon: <ShoppingCart /> },
   { id: 'produtos', label: 'Produtos', icon: <Package /> },
-  { id: 'complementos', label: 'Complementos', icon: <Plus /> },
   { id: 'clientes', label: 'Clientes', icon: <Users /> },
   { id: 'entregadores', label: 'Entregadores', icon: <Truck /> },
-  { id: 'cozinheiros', label: 'Cozinheiros', icon: <ChefHat /> },
   { id: 'configuracoes', label: 'Configurações', icon: <Settings /> }
 ];
 
@@ -73,7 +69,7 @@ const Admin: React.FC = () => {
     
     if (user.funcao !== 'admin' && user.funcao !== 'master') {
      
-      navigate('/');
+      navigate('/home');
       return;
     }
     
@@ -266,8 +262,8 @@ const performConfirmDelivery = async (): Promise<void> => {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-slate-800 text-white flex items-center justify-between px-4 z-50">
         <h1 className="text-xl font-bold flex items-center gap-2">
-          <Sprout className="w-5 h-5" />
-          <span>Açaí Dicasa</span>
+          <Store className="w-5 h-5" />
+          <span>MK Raçoes</span>
         </h1>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -283,8 +279,8 @@ const performConfirmDelivery = async (): Promise<void> => {
       } lg:translate-x-0`}>
         <div className="h-20 flex items-center justify-center border-b border-slate-700">
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sprout />
-            <span>Açaí Dicasa</span>
+            <Store />
+            <span>MK Raçoes</span>
           </h1>
         </div>
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -308,7 +304,7 @@ const performConfirmDelivery = async (): Promise<void> => {
           <button 
             onClick={() => {
               logout();
-              navigate('/');
+              navigate('/home');
             }}
             className="flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-red-400 hover:bg-red-900/50 w-full"
           >
@@ -359,17 +355,19 @@ const performConfirmDelivery = async (): Promise<void> => {
           />
         )}
 
-        {/* Complementos */}
-        {activePage === 'complementos' && <Complementos />}
-
         {/* Clientes */}
-        {activePage === 'clientes' && <Clientes user={users} />}
+        {activePage === 'clientes' && (
+          <Clientes 
+            user={users} 
+            onRefresh={async () => {
+              const refreshedUsers = await apiService.getUsers();
+              setUsers(refreshedUsers);
+            }}
+          />
+        )}
 
         {/* Entregadores */}
         {activePage === 'entregadores' && <Entregadores />}
-
-        {/* Cozinheiros */}
-        {activePage === 'cozinheiros' && <Cozinheiros />}
 
         {/* Configurações */}
         {activePage === 'configuracoes' && <Configuracoes />}

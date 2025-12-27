@@ -145,6 +145,224 @@ router.get('/profile', authenticateToken, async (req, res) => {
     }
 });
 
+// Rota para admin criar cliente sem senha
+router.post('/users', authenticateToken, authorize('admin'), async (req, res) => {
+    const { username, telefone } = req.body;
+    // Remover máscara do telefone antes de salvar
+    const telefoneLimpo = removePhoneMask(telefone);
+    console.log(`👤 [POST /auth/users] Admin ${req.user.id} criando cliente: ${username}, telefone: ${telefoneLimpo}`);
+    
+    try {
+        // Verificar se já existe usuário com este telefone
+        const existingUser = await prisma.usuario.findUnique({ where: { telefone: telefoneLimpo } });
+        if (existingUser) {
+            console.warn(`⚠️ [POST /auth/users] Telefone já existe: ${telefoneLimpo}`);
+            return res.status(400).json({ message: 'Telefone já cadastrado.' });
+        }
+
+        // Verificar se já existe usuário com este nome
+        const existingUsername = await prisma.usuario.findUnique({ where: { nomeUsuario: username } });
+        if (existingUsername) {
+            console.warn(`⚠️ [POST /auth/users] Nome de usuário já existe: ${username}`);
+            return res.status(400).json({ message: 'Nome de usuário já cadastrado.' });
+        }
+
+        // Gerar senha padrão aleatória (o cliente poderá redefinir depois)
+        const defaultPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        
+        const newUser = await prisma.usuario.create({
+            data: { 
+                nomeUsuario: username, 
+                telefone: telefoneLimpo, 
+                senha: hashedPassword,
+                funcao: 'user'
+            }
+        });
+        console.log(`✅ [POST /auth/users] Cliente cadastrado com sucesso: ${username} (ID: ${newUser.id})`);
+        res.status(201).json({ message: 'Cliente cadastrado com sucesso!', user: newUser });
+    } catch (err) {
+        console.error('❌ [POST /auth/users] Erro interno ao cadastrar cliente:', err);
+        res.status(500).json({ message: 'Erro ao cadastrar cliente.' });
+    }
+});
+
+// Rota para admin adicionar endereço para um cliente específico
+router.post('/users/:userId/address', authenticateToken, authorize('admin'), async (req, res) => {
+    const { userId } = req.params;
+    const { street, number, complement, neighborhood, reference, isDefault } = req.body;
+
+    console.log(`📍 [POST /auth/users/${userId}/address] Admin ${req.user.id} adicionando endereço para cliente ID: ${userId}`);
+
+    if (!street || !number || !neighborhood) {
+        console.warn('⚠️ [POST /auth/users/:userId/address] Dados obrigatórios do endereço não fornecidos.');
+        return res.status(400).json({ message: 'Rua, número e bairro são obrigatórios.' });
+    }
+
+    try {
+        // Verificar se o usuário existe
+        const user = await prisma.usuario.findUnique({ where: { id: parseInt(userId) } });
+        if (!user) {
+            return res.status(404).json({ message: 'Cliente não encontrado.' });
+        }
+
+        // Se isDefault é verdadeiro, definir outros endereços como não padrão
+        if (isDefault) {
+            await prisma.endereco.updateMany({
+                where: { usuarioId: parseInt(userId) },
+                data: { padrao: false }
+            });
+        }
+
+        // Se for o primeiro endereço, definir como padrão automaticamente
+        const addressCount = await prisma.endereco.count({
+            where: { usuarioId: parseInt(userId) }
+        });
+        const shouldBeDefault = addressCount === 0 || isDefault;
+
+        if (shouldBeDefault && addressCount > 0) {
+            await prisma.endereco.updateMany({
+                where: { usuarioId: parseInt(userId) },
+                data: { padrao: false }
+            });
+        }
+
+        const newAddress = await prisma.endereco.create({
+            data: {
+                rua: street,
+                numero: number,
+                complemento: complement || null,
+                bairro: neighborhood,
+                pontoReferencia: reference || null,
+                padrao: shouldBeDefault,
+                usuarioId: parseInt(userId)
+            }
+        });
+
+        console.log(`✅ [POST /auth/users/:userId/address] Endereço criado com sucesso: ID ${newAddress.id}`);
+        res.status(201).json({ message: 'Endereço cadastrado com sucesso!', address: newAddress });
+    } catch (err) {
+        console.error('❌ [POST /auth/users/:userId/address] Erro interno:', err);
+        res.status(500).json({ message: 'Erro ao cadastrar endereço.' });
+    }
+});
+
+// Rota para admin atualizar dados do cliente
+router.put('/users/:userId', authenticateToken, authorize('admin'), async (req, res) => {
+    const { userId } = req.params;
+    const { username, telefone } = req.body;
+    
+    console.log(`✏️ [PUT /auth/users/${userId}] Admin ${req.user.id} atualizando cliente ID: ${userId}`);
+    
+    try {
+        // Verificar se o usuário existe
+        const existingUser = await prisma.usuario.findUnique({ where: { id: parseInt(userId) } });
+        if (!existingUser) {
+            return res.status(404).json({ message: 'Cliente não encontrado.' });
+        }
+
+        // Remover máscara do telefone se fornecido
+        const telefoneLimpo = telefone ? removePhoneMask(telefone) : existingUser.telefone;
+
+        // Verificar se outro usuário já tem o mesmo telefone
+        if (telefone) {
+            const userWithSamePhone = await prisma.usuario.findFirst({
+                where: { 
+                    telefone: telefoneLimpo,
+                    id: { not: parseInt(userId) }
+                }
+            });
+            if (userWithSamePhone) {
+                return res.status(400).json({ message: 'Telefone já cadastrado para outro cliente.' });
+            }
+        }
+
+        // Verificar se outro usuário já tem o mesmo nome de usuário
+        if (username) {
+            const userWithSameUsername = await prisma.usuario.findFirst({
+                where: { 
+                    nomeUsuario: username,
+                    id: { not: parseInt(userId) }
+                }
+            });
+            if (userWithSameUsername) {
+                return res.status(400).json({ message: 'Nome de usuário já cadastrado para outro cliente.' });
+            }
+        }
+
+        // Atualizar dados
+        const updateData = {};
+        if (username) updateData.nomeUsuario = username;
+        if (telefone) updateData.telefone = telefoneLimpo;
+
+        const updatedUser = await prisma.usuario.update({
+            where: { id: parseInt(userId) },
+            data: updateData
+        });
+
+        console.log(`✅ [PUT /auth/users/${userId}] Cliente atualizado com sucesso`);
+        res.json({ message: 'Cliente atualizado com sucesso!', user: updatedUser });
+    } catch (err) {
+        console.error('❌ [PUT /auth/users/:userId] Erro interno:', err);
+        res.status(500).json({ message: 'Erro ao atualizar cliente.' });
+    }
+});
+
+// Rota para admin atualizar endereço de um cliente
+router.put('/users/:userId/address/:addressId', authenticateToken, authorize('admin'), async (req, res) => {
+    const { userId, addressId } = req.params;
+    const { street, number, complement, neighborhood, reference, isDefault } = req.body;
+
+    console.log(`✏️ [PUT /auth/users/${userId}/address/${addressId}] Admin ${req.user.id} atualizando endereço`);
+
+    if (!street || !number || !neighborhood) {
+        return res.status(400).json({ message: 'Rua, número e bairro são obrigatórios.' });
+    }
+
+    try {
+        // Verificar se o endereço existe e pertence ao usuário
+        const existingAddress = await prisma.endereco.findFirst({
+            where: { 
+                id: parseInt(addressId), 
+                usuarioId: parseInt(userId) 
+            }
+        });
+
+        if (!existingAddress) {
+            return res.status(404).json({ message: 'Endereço não encontrado.' });
+        }
+
+        // Se isDefault é verdadeiro, definir outros endereços como não padrão
+        if (isDefault) {
+            await prisma.endereco.updateMany({
+                where: { 
+                    usuarioId: parseInt(userId), 
+                    id: { not: parseInt(addressId) } 
+                },
+                data: { padrao: false }
+            });
+        }
+
+        const updatedAddress = await prisma.endereco.update({
+            where: { id: parseInt(addressId) },
+            data: {
+                rua: street,
+                numero: number,
+                complemento: complement || null,
+                bairro: neighborhood,
+                pontoReferencia: reference || null,
+                padrao: isDefault !== undefined ? isDefault : existingAddress.padrao
+            }
+        });
+
+        console.log(`✅ [PUT /auth/users/:userId/address/:addressId] Endereço atualizado: ID ${addressId}`);
+        res.json({ message: 'Endereço atualizado com sucesso!', address: updatedAddress });
+    } catch (err) {
+        console.error('❌ [PUT /auth/users/:userId/address/:addressId] Erro interno:', err);
+        res.status(500).json({ message: 'Erro ao atualizar endereço.' });
+    }
+});
+
 router.get('/users', authenticateToken, authorize('admin'), async (req, res) => {
     console.log(`👥 [GET /auth/users] Admin ${req.user.id} solicitando lista de usuários`);
     
@@ -157,6 +375,17 @@ router.get('/users', authenticateToken, authorize('admin'), async (req, res) => 
                 funcao: true,
                 telefone: true,
                 criadoEm: true,
+                enderecos: {
+                    select: {
+                        id: true,
+                        rua: true,
+                        numero: true,
+                        complemento: true,
+                        bairro: true,
+                        pontoReferencia: true,
+                        padrao: true
+                    }
+                },
                 pedidos: {
                     select: {
                         id: true,
@@ -200,6 +429,16 @@ router.get('/users', authenticateToken, authorize('admin'), async (req, res) => 
             funcao: user.funcao,
             telefone: user.telefone,
             criadoEm: user.criadoEm,
+            enderecos: (user.enderecos || []).map(endereco => ({
+                id: endereco.id,
+                street: endereco.rua,
+                number: endereco.numero,
+                complement: endereco.complemento,
+                neighborhood: endereco.bairro,
+                reference: endereco.pontoReferencia,
+                isDefault: endereco.padrao,
+                userId: user.id
+            })),
             order: (user.pedidos || []).map(pedido => ({
                 id: pedido.id,
                 totalPrice: Number(pedido.precoTotal) || 0,

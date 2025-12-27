@@ -353,6 +353,313 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// Rota para admin criar pedido para um cliente
+router.post('/admin', authenticateToken, authorize('admin'), async (req, res) => {
+    const { userId, addressId, items, paymentMethod, deliveryType, deliveryFee, notes, precisaTroco, valorTroco } = req.body;
+    const adminId = req.user.id;
+    
+    console.log(`[POST /api/orders/admin] Admin ${adminId} criando pedido para cliente ${userId}`);
+    
+    if (!userId || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'Cliente e itens são obrigatórios.' });
+    }
+    
+    if (!paymentMethod) {
+        return res.status(400).json({ message: 'Forma de pagamento não informada.' });
+    }
+    
+    const tipo = deliveryType || 'delivery';
+    let taxa = deliveryFee || 0;
+    
+    try {
+        // Verificar se o cliente existe e buscar seus endereços
+        const user = await prisma.usuario.findUnique({
+            where: { id: parseInt(userId) },
+            include: { enderecos: true }
+        });
+        
+        if (!user) {
+            return res.status(404).json({ message: 'Cliente não encontrado.' });
+        }
+        
+        // Para entrega, verificar endereço
+        let shippingAddress = null;
+        if (tipo === 'delivery') {
+            if (addressId) {
+                shippingAddress = user.enderecos.find(addr => addr.id === parseInt(addressId));
+                if (!shippingAddress) {
+                    return res.status(400).json({ message: 'Endereço selecionado não encontrado.' });
+                }
+            } else {
+                shippingAddress = user.enderecos.find(addr => addr.padrao) || user.enderecos[0];
+                if (!shippingAddress) {
+                    return res.status(400).json({ message: 'Cliente não possui endereço cadastrado.' });
+                }
+            }
+        }
+        
+        // Calcular preço total
+        let subprecoTotal = 0;
+        for (const item of items) {
+            const product = await prisma.produto.findUnique({
+                where: { id: item.productId }
+            });
+            
+            if (!product) {
+                return res.status(400).json({ message: `Produto ID ${item.productId} não encontrado.` });
+            }
+            
+            const itemPrice = item.price || parseFloat(product.preco);
+            subprecoTotal += itemPrice * (item.quantity || 1);
+        }
+        
+        // Verificar promoção de frete grátis
+        let freteGratis = false;
+        if (tipo === 'delivery' && taxa > 0) {
+            const storeConfig = await prisma.configuracao_loja.findFirst();
+            if (storeConfig && storeConfig.promocaoTaxaAtiva) {
+                const hoje = new Date().getDay().toString();
+                const diasPromo = storeConfig.promocaoDias ? storeConfig.promocaoDias.split(',') : [];
+                
+                if (diasPromo.includes(hoje)) {
+                    const valorMinimo = parseFloat(storeConfig.promocaoValorMinimo || 0);
+                    if (subprecoTotal >= valorMinimo) {
+                        taxa = 0;
+                        freteGratis = true;
+                    }
+                }
+            }
+        }
+        
+        const precoTotal = subprecoTotal + (tipo === 'delivery' ? taxa : 0);
+        const initialStatus = (paymentMethod === 'CREDIT_CARD' || paymentMethod === 'CASH_ON_DELIVERY') ? 'being_prepared' : 'pending_payment';
+        
+        // Criar pedido
+        const newOrder = await prisma.$transaction(async (tx) => {
+            const order = await tx.pedido.create({
+                data: {
+                    usuarioId: parseInt(userId),
+                    precoTotal: precoTotal,
+                    status: initialStatus,
+                    tipoEntrega: tipo,
+                    taxaEntrega: tipo === 'delivery' ? taxa : 0,
+                    metodoPagamento: paymentMethod,
+                    observacoes: notes && notes.trim() ? notes.trim() : null,
+                    precisaTroco: paymentMethod === 'CASH_ON_DELIVERY' ? (precisaTroco === true || precisaTroco === 'true') : false,
+                    valorTroco: paymentMethod === 'CASH_ON_DELIVERY' && precisaTroco && valorTroco ? parseFloat(valorTroco) : null,
+                    atualizadoEm: new Date(),
+                    ruaEntrega: shippingAddress?.rua || null,
+                    numeroEntrega: shippingAddress?.numero || null,
+                    complementoEntrega: shippingAddress?.complemento || null,
+                    bairroEntrega: shippingAddress?.bairro || null,
+                    telefoneEntrega: user.telefone || null
+                }
+            });
+            
+            // Criar itens do pedido
+            for (const item of items) {
+                const product = await tx.produto.findUnique({
+                    where: { id: item.productId }
+                });
+                
+                const itemPrice = item.price || parseFloat(product.preco);
+                
+                const orderItem = await tx.item_pedido.create({
+                    data: {
+                        pedidoId: order.id,
+                        produtoId: item.productId,
+                        quantidade: item.quantity || 1,
+                        precoNoPedido: itemPrice
+                    }
+                });
+                
+                // Adicionar complementos se fornecidos
+                if (item.complementIds && Array.isArray(item.complementIds) && item.complementIds.length > 0) {
+                    await Promise.all(
+                        item.complementIds.map(complementId =>
+                            tx.item_pedido_complemento.create({
+                                data: {
+                                    itemPedidoId: orderItem.id,
+                                    complementoId: complementId
+                                }
+                            })
+                        )
+                    );
+                }
+            }
+            
+            // Criar pagamento
+            await tx.pagamento.create({
+                data: {
+                    pedidoId: order.id,
+                    valor: precoTotal,
+                    metodo: paymentMethod,
+                    status: paymentMethod === 'PIX' ? 'PENDING' : (paymentMethod === 'CREDIT_CARD' || paymentMethod === 'CASH_ON_DELIVERY' ? 'PAID' : 'PENDING'),
+                    atualizadoEm: new Date()
+                }
+            });
+            
+            return await tx.pedido.findUnique({
+                where: { id: order.id },
+                include: {
+                    itens_pedido: {
+                        include: {
+                            produto: true
+                        }
+                    },
+                    usuario: {
+                        select: {
+                            id: true,
+                            nomeUsuario: true,
+                            telefone: true
+                        }
+                    }
+                }
+            });
+        });
+        
+        console.log(`[POST /api/orders/admin] Pedido ID ${newOrder.id} criado com sucesso pelo admin ${adminId} para cliente ${userId}`);
+        
+        // Enviar mensagem de confirmação para o cliente
+        if (user.telefone) {
+            try {
+                // Buscar pedido completo com itens e complementos para a mensagem
+                const orderWithItems = await prisma.pedido.findUnique({
+                    where: { id: newOrder.id },
+                    include: {
+                        itens_pedido: {
+                            include: {
+                                produto: true,
+                                complementos: {
+                                    include: {
+                                        complemento: true
+                                    }
+                                }
+                            }
+                        },
+                        usuario: {
+                            select: {
+                                nomeUsuario: true,
+                                telefone: true
+                            }
+                        }
+                    }
+                });
+                
+                const itens = orderWithItems.itens_pedido.map(item => {
+                    const complementos = item.complementos?.map(ic => ic.complemento?.nome).filter(Boolean).join(', ');
+                    return `• ${item.quantidade}x ${item.produto.nome}${complementos ? ` (${complementos})` : ''}`;
+                }).join('\n');
+                
+                // Informações de entrega/retirada
+                const deliveryInfo = tipo === 'pickup' 
+                    ? `📍 *Retirada no local*\n🏪 Endereço da loja: Açaidicasa, praça Geraldo Sá.\n` +
+                    `Localização maps: https://maps.app.goo.gl/LGe84k24KogZWXMt6?g_st=ipc`
+                    : `*Entrega em casa*\n📍 Endereço: ${shippingAddress.rua}, ${shippingAddress.numero}${shippingAddress.complemento ? ` - ${shippingAddress.complemento}` : ''}\nBairro: ${shippingAddress.bairro}${shippingAddress.pontoReferencia ? `\n*Referência:* ${shippingAddress.pontoReferencia}` : ''}`;
+                
+                // Adicionar observações se houver
+                const notesSection = notes && notes.trim() ? `\n\n📝 *Observações:*\n${notes.trim()}` : '';
+                
+                let message;
+                
+                if (paymentMethod === 'CREDIT_CARD') {
+                    message =
+                        `*Pedido Confirmado!* 🎉\n\n` +
+                        `*Pedido Nº:* ${newOrder.id}\n\n` +
+                        `*Itens:*\n${itens}\n\n` +
+                        `💰 *Total:* R$ ${Number(newOrder.precoTotal).toFixed(2)}\n` +
+                        `💳 *Forma de pagamento:* Cartão de Crédito\n\n` +
+                        `${deliveryInfo}` +
+                        notesSection + `\n\n` +
+                        `*Seu pedido já está sendo preparado!*\n` +
+                        (tipo === 'pickup' ? `Você pode retirar em breve!` : `Em breve será enviado para entrega.`) + `\n\n` +
+                        `*Obrigado por escolher a gente! 💜*\n`;
+                } else if (paymentMethod === 'CASH_ON_DELIVERY') {
+                    // Adicionar informação de troco se necessário
+                    const trocoInfo = precisaTroco && valorTroco 
+                        ? `\n💰 *Troco para:* R$ ${parseFloat(valorTroco).toFixed(2)}`
+                        : '';
+                    
+                    message =
+                        `*Pedido Confirmado!* 🎉\n\n` +
+                        `*Pedido Nº:* ${newOrder.id}\n\n` +
+                        `*Itens:*\n${itens}\n\n` +
+                        `💰 *Total:* R$ ${Number(newOrder.precoTotal).toFixed(2)}${trocoInfo}\n` +
+                        `💵 *Forma de pagamento:* Dinheiro ${tipo === 'pickup' ? 'na Retirada' : 'na Entrega'}\n\n` +
+                        `${deliveryInfo}` +
+                        notesSection + `\n\n` +
+                        `*Seu pedido já está sendo preparado!*\n` +
+                        (tipo === 'pickup' ? `Tenha o dinheiro trocado em mãos na retirada.` : `Tenha o dinheiro trocado em mãos na entrega.`) + `\n\n` +
+                        `*Obrigado por escolher a gente! 💜*\n`;
+                } else {
+                    message =
+                        `*Pedido Confirmado!* 🎉\n\n` +
+                        `*Pedido Nº:* ${newOrder.id}\n\n` +
+                        `*Itens:*\n${itens}\n\n` +
+                        `💰 *Total:* R$ ${Number(newOrder.precoTotal).toFixed(2)}\n` +
+                        `💸 *Forma de pagamento:* PIX\n` +
+                        `🔑 *Chave PIX:* 99984959718\n\n` +
+                        `${deliveryInfo}` +
+                        notesSection + `\n\n` +
+                        `📸 *Após o pagamento, por favor envie o comprovante aqui.*\n\n` +
+                        `*Obrigado por escolher a gente! 💜*\n`;
+                }
+                
+                await sendWhatsAppMessageZApi(user.telefone, message);
+                console.log(`[POST /api/orders/admin] Mensagem de confirmação enviada para o cliente ${userId} no telefone ${user.telefone}`);
+            } catch (err) {
+                console.error(`[POST /api/orders/admin] Erro ao enviar mensagem de confirmação para o cliente:`, err.response?.data || err.message);
+                // Não falha a operação se a mensagem falhar
+            }
+        } else {
+            console.log(`[POST /api/orders/admin] Cliente ${userId} não possui telefone cadastrado para envio de confirmação`);
+        }
+        
+        // Se o pedido já está em preparo (cartão ou dinheiro), notificar cozinheiro
+        if (initialStatus === 'being_prepared') {
+            try {
+                // Buscar um cozinheiro ativo
+                const cozinheiroAtivo = await prisma.cozinheiro.findFirst({
+                    where: { ativo: true },
+                    orderBy: { criadoEm: 'asc' } // Pega o mais antigo (FIFO)
+                });
+
+                if (cozinheiroAtivo) {
+                    // Buscar pedido completo com relacionamentos
+                    const pedidoCompleto = await prisma.pedido.findUnique({
+                        where: { id: newOrder.id },
+                        include: {
+                            usuario: true,
+                            itens_pedido: {
+                                include: {
+                                    produto: true,
+                                    complementos: {
+                                        include: {
+                                            complemento: true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    console.log(`👨‍🍳 Notificando cozinheiro: ${cozinheiroAtivo.nome}`);
+                    await sendCookNotification(pedidoCompleto, cozinheiroAtivo);
+                } else {
+                    console.log('⚠️ Nenhum cozinheiro ativo encontrado para notificar');
+                }
+            } catch (err) {
+                console.error('❌ Erro ao notificar cozinheiro:', err);
+            }
+        }
+        
+        res.status(201).json({ message: 'Pedido criado com sucesso!', order: newOrder });
+    } catch (err) {
+        console.error(`[POST /api/orders/admin] Erro ao criar pedido:`, err);
+        res.status(500).json({ message: 'Erro ao criar pedido.', error: err.message });
+    }
+});
+
 // Rota para ver o histórico de pedidos do usuário
 router.get('/history', authenticateToken, async (req, res) => {
     const userId = req.user.id;

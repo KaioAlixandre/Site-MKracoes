@@ -1,8 +1,25 @@
-import React from 'react';
-import { Users, TrendingUp } from 'lucide-react';
-import { User } from '../../types';
+import React, { useState } from 'react';
+import { Users, TrendingUp, Plus, MapPin, Edit } from 'lucide-react';
+import { User, AddressForm, Address } from '../../types';
+import ModalAdicionarCliente from './components/ModalAdicionarCliente';
+import ModalAdicionarEnderecoCliente from './components/ModalAdicionarEnderecoCliente';
+import ModalEditarCliente from './components/ModalEditarCliente';
+import ModalEditarEnderecoCliente from './components/ModalEditarEnderecoCliente';
+import apiService from '../../services/api';
 
-const Clientes: React.FC<{ user: User[] }> = ({ user }) => {
+interface ClientesProps {
+  user: User[];
+  onRefresh?: () => Promise<void>;
+}
+
+const Clientes: React.FC<ClientesProps> = ({ user, onRefresh }) => {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditAddressModal, setShowEditAddressModal] = useState(false);
+  const [selectedCliente, setSelectedCliente] = useState<User | null>(null);
+  const [selectedEndereco, setSelectedEndereco] = useState<Address | null>(null);
+  const [showMenuForCliente, setShowMenuForCliente] = useState<number | null>(null);
   // Calcular LTV Médio baseado nos dados reais
   const calculateAverageLTV = () => {
     if (user.length === 0) return 0;
@@ -42,11 +59,71 @@ const Clientes: React.FC<{ user: User[] }> = ({ user }) => {
     return totalGastoB - totalGastoA;
   });
 
+  const handleAddCliente = async (data: { username: string; telefone: string }) => {
+    await apiService.createUser(data);
+    if (onRefresh) {
+      await onRefresh();
+    }
+  };
+
+  const handleAddEndereco = async (data: AddressForm) => {
+    if (!selectedCliente) return;
+    await apiService.addAddressForUser(selectedCliente.id, data);
+    if (onRefresh) {
+      await onRefresh();
+    }
+  };
+
+  const handleOpenAddressModal = (cliente: User) => {
+    setSelectedCliente(cliente);
+    setShowAddressModal(true);
+    setShowMenuForCliente(null);
+  };
+
+  const handleOpenEditModal = (cliente: User) => {
+    setSelectedCliente(cliente);
+    setShowEditModal(true);
+    setShowMenuForCliente(null);
+  };
+
+  const handleOpenEditAddressModal = (cliente: User, endereco: Address) => {
+    setSelectedCliente(cliente);
+    setSelectedEndereco(endereco);
+    setShowEditAddressModal(true);
+    setShowMenuForCliente(null);
+  };
+
+  const handleUpdateCliente = async (data: { username: string; telefone: string }) => {
+    if (!selectedCliente) return;
+    await apiService.updateUser(selectedCliente.id, data);
+    if (onRefresh) {
+      await onRefresh();
+    }
+  };
+
+  const handleUpdateEndereco = async (data: AddressForm) => {
+    if (!selectedCliente || !selectedEndereco) return;
+    await apiService.updateUserAddress(selectedCliente.id, selectedEndereco.id, data);
+    if (onRefresh) {
+      await onRefresh();
+    }
+  };
+
   return (
   <div id="clientes" className="page">
-    <header className="mb-4 sm:mb-6">
-      <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800">Clientes</h2>
-      <p className="text-xs sm:text-sm text-slate-500">Visualize e gerencie sua base de clientes.</p>
+    <header className="mb-4 sm:mb-6 flex items-center justify-between">
+      <div>
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800">Clientes</h2>
+        <p className="text-xs sm:text-sm text-slate-500">Visualize e gerencie sua base de clientes.</p>
+      </div>
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+      >
+        <Plus className="w-4 h-4" />
+        <span className="hidden sm:inline">Adicionar Cliente</span>
+        <span className="sm:hidden">Adicionar</span>
+      </button>
     </header>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
       <div className="bg-white p-3 sm:p-4 rounded-xl shadow-md flex items-center gap-2 sm:gap-3">
@@ -136,9 +213,83 @@ const Clientes: React.FC<{ user: User[] }> = ({ user }) => {
                       )}
                     </td>
                     <td className="p-2 sm:p-3 text-center">
-                      <button className="text-indigo-600 hover:text-indigo-800 text-xs font-medium hover:underline">
-                        Detalhes
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          className="p-1.5 text-slate-500 rounded-md hover:bg-slate-200 hover:text-indigo-600 transition-colors"
+                          onClick={() => handleOpenEditModal(cliente)}
+                          title="Editar Cliente"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <div className="relative">
+                          <button
+                            className="p-1.5 text-slate-500 rounded-md hover:bg-slate-200 hover:text-indigo-600 transition-colors"
+                            onClick={() => setShowMenuForCliente(showMenuForCliente === cliente.id ? null : cliente.id)}
+                            title="Gerenciar Endereços"
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </button>
+                          
+                          {showMenuForCliente === cliente.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setShowMenuForCliente(null)}
+                              />
+                              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl z-50 border border-gray-200 overflow-hidden">
+                                <div className="py-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenAddressModal(cliente);
+                                      setShowMenuForCliente(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-3 transition-colors"
+                                  >
+                                    <Plus className="w-4 h-4 text-indigo-600" />
+                                    <span>
+                                      {cliente.enderecos && cliente.enderecos.length > 0 
+                                        ? 'Adicionar Endereço' 
+                                        : 'Cadastrar Endereço'}
+                                    </span>
+                                  </button>
+                                  {cliente.enderecos && cliente.enderecos.length > 0 && (
+                                    <>
+                                      <div className="border-t border-gray-200 my-1"></div>
+                                      <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Endereços ({cliente.enderecos.length})
+                                      </div>
+                                      <div className="max-h-48 overflow-y-auto">
+                                        {cliente.enderecos.map((endereco) => (
+                                          <button
+                                            key={endereco.id}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenEditAddressModal(cliente, endereco);
+                                              setShowMenuForCliente(null);
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-start gap-3 transition-colors group"
+                                          >
+                                            <MapPin className="w-4 h-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate">
+                                                {endereco.street}, {endereco.number}
+                                              </div>
+                                              {endereco.isDefault && (
+                                                <span className="text-xs text-indigo-600 font-medium">Padrão</span>
+                                              )}
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -148,6 +299,58 @@ const Clientes: React.FC<{ user: User[] }> = ({ user }) => {
         </table>
       </div>
     </div>
+
+    {showAddModal && (
+      <ModalAdicionarCliente
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddCliente}
+      />
+    )}
+
+    {showAddressModal && selectedCliente && (
+      <ModalAdicionarEnderecoCliente
+        onClose={() => {
+          setShowAddressModal(false);
+          setSelectedCliente(null);
+        }}
+        onAdd={handleAddEndereco}
+        clienteNome={selectedCliente.nomeUsuario}
+        hasExistingAddress={(selectedCliente.enderecos?.length || 0) > 0}
+      />
+    )}
+
+    {showEditModal && selectedCliente && (
+      <ModalEditarCliente
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedCliente(null);
+        }}
+        onUpdate={handleUpdateCliente}
+        cliente={selectedCliente}
+      />
+    )}
+
+    {showEditAddressModal && selectedCliente && selectedEndereco && (
+      <ModalEditarEnderecoCliente
+        onClose={() => {
+          setShowEditAddressModal(false);
+          setSelectedCliente(null);
+          setSelectedEndereco(null);
+        }}
+        onUpdate={handleUpdateEndereco}
+        clienteNome={selectedCliente.nomeUsuario}
+        endereco={selectedEndereco}
+        hasMultipleAddresses={(selectedCliente.enderecos?.length || 0) > 1}
+      />
+    )}
+
+    {/* Overlay para fechar menu ao clicar fora */}
+    {showMenuForCliente !== null && (
+      <div
+        className="fixed inset-0 z-40"
+        onClick={() => setShowMenuForCliente(null)}
+      />
+    )}
   </div>
   );
 }

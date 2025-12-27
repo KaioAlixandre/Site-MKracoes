@@ -117,7 +117,12 @@ class ApiService {
   async getUsers(): Promise<User[]> {
   const response: AxiosResponse<User[]> = await this.api.get('/auth/users');
   return response.data;
-}
+  }
+
+  async createUser(userData: { username: string; telefone: string }): Promise<ApiResponse<User>> {
+    const response: AxiosResponse<ApiResponse<User>> = await this.api.post('/auth/users', userData);
+    return response.data;
+  }
 
   // Address endpoints
   async addAddress(addressData: AddressForm): Promise<{ user: User }> {
@@ -127,6 +132,21 @@ class ApiService {
 
   async getAddresses(): Promise<Address[]> {
     const response: AxiosResponse<Address[]> = await this.api.get('/auth/profile/addresses');
+    return response.data;
+  }
+
+  async addAddressForUser(userId: number, addressData: AddressForm): Promise<ApiResponse<Address>> {
+    const response: AxiosResponse<ApiResponse<Address>> = await this.api.post(`/auth/users/${userId}/address`, addressData);
+    return response.data;
+  }
+
+  async updateUser(userId: number, userData: { username?: string; telefone?: string }): Promise<ApiResponse<User>> {
+    const response: AxiosResponse<ApiResponse<User>> = await this.api.put(`/auth/users/${userId}`, userData);
+    return response.data;
+  }
+
+  async updateUserAddress(userId: number, addressId: number, addressData: AddressForm): Promise<ApiResponse<Address>> {
+    const response: AxiosResponse<ApiResponse<Address>> = await this.api.put(`/auth/users/${userId}/address/${addressId}`, addressData);
     return response.data;
   }
 
@@ -308,6 +328,21 @@ class ApiService {
     valorTroco?: number;
   }): Promise<ApiResponse<Order>> {
     const response: AxiosResponse<ApiResponse<Order>> = await this.api.post('/orders', orderData);
+    return response.data;
+  }
+
+  async createOrderAsAdmin(orderData: {
+    userId: number;
+    addressId?: number;
+    items: Array<{ productId: number; quantity: number; price?: number; complementIds?: number[] }>;
+    paymentMethod: string;
+    deliveryType?: string;
+    deliveryFee?: number;
+    notes?: string;
+    precisaTroco?: boolean;
+    valorTroco?: number;
+  }): Promise<ApiResponse<Order>> {
+    const response: AxiosResponse<ApiResponse<Order>> = await this.api.post('/orders/admin', orderData);
     return response.data;
   }
 

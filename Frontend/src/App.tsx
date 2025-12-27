@@ -1,9 +1,10 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AdminOrderNotification from './components/AdminOrderNotification';
+import ProtectedAdminRoute from './components/ProtectedAdminRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Cadastrar from './pages/Cadastrar';
@@ -22,13 +23,22 @@ import RedefinirSenha from './pages/RedefinirSenha';
 import ProdutoDetalhes from './pages/ProdutoDetalhes';
 
 function AppContent() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname === '/' || location.pathname === '/admin';
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
-      <AdminOrderNotification />
+      {!isAdminRoute && <Header />}
+      {!isAdminRoute && <AdminOrderNotification />}
       <main className="flex-1 pb-16 md:pb-0">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={
+            <ProtectedAdminRoute>
+              <PainelAdmin />
+            </ProtectedAdminRoute>
+          } />
+          <Route path="/home" element={<Home />} />
+          <Route path="/loja" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Cadastrar />} />
           <Route path="/forgot-password" element={<EsqueciSenha />} />
@@ -40,14 +50,18 @@ function AppContent() {
           <Route path="/contact" element={<Contato />} />
           <Route path="/profile" element={<Perfil />} />
           <Route path="/orders" element={<Pedidos />} />
-          <Route path="/admin" element={<PainelAdmin />} /> 
+          <Route path="/admin" element={
+            <ProtectedAdminRoute>
+              <PainelAdmin />
+            </ProtectedAdminRoute>
+          } /> 
           <Route path="/add-address" element={<AddAddress />} />
           <Route path="/add-phone" element={<AddPhone />} />
           <Route path="/checkout" element={<Checkout />} />
           {/* Rotas adicionais serão adicionadas aqui */}
         </Routes>
       </main>
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </div>
   );
 }

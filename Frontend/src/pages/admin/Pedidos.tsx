@@ -3,6 +3,7 @@ import { Printer, ArrowRightCircle, RotateCw, Truck, MapPin, Filter, Calendar, X
 import { Order, Product } from '../../types';
 import { printOrderReceipt } from '../../utils/printOrderReceipt';
 import apiService from '../../services/api';
+import ModalCriarPedido from './components/ModalCriarPedido';
 
 // Função para traduzir status para português
 const getStatusInPortuguese = (status: string) => {
@@ -36,6 +37,7 @@ const Pedidos: React.FC<{
   onRefresh?: () => void
 }> = ({ orders, handleAdvanceStatus, onRefresh }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const handleRefresh = async () => {
     if (onRefresh) {
@@ -275,6 +277,18 @@ const Pedidos: React.FC<{
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowCreateModal(true);
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-green-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Pedido
+          </button>
           <button 
             onClick={() => setShowFilters(!showFilters)}
             className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors relative ${
@@ -1053,6 +1067,20 @@ const Pedidos: React.FC<{
             </div>
           </div>
         </div>
+      )}
+
+      {showCreateModal && (
+        <ModalCriarPedido
+          onClose={() => {
+            setShowCreateModal(false);
+          }}
+          onSuccess={async () => {
+            if (onRefresh) {
+              await onRefresh();
+            }
+            setShowCreateModal(false);
+          }}
+        />
       )}
     </div>
   );

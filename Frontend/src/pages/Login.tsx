@@ -77,14 +77,14 @@ const Login: React.FC = () => {
           
           if (userData.funcao === 'admin' || userData.funcao === 'master') {
            
-            navigate('/admin');
+            navigate('/');
           } else {
            
-            navigate('/');
+            navigate('/home');
           }
         } else {
          
-          navigate('/');
+          navigate('/home');
         }
       }, 100);
     } catch (err: any) {
