@@ -251,6 +251,7 @@ export interface Deliverer {
   phone: string;
   email?: string;
   isActive: boolean;
+  totalDeliveries: number;
   createdAt: string;
 }
 

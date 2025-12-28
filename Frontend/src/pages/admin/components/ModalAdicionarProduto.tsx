@@ -253,37 +253,6 @@ const AddProductModal: React.FC<Props> = ({ categories, onClose, onAdd }) => {
                 Produto em destaque (aparecerá primeiro)
               </label>
             </div>
-            <div className="flex flex-col gap-2 p-3 bg-purple-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <input 
-                  type="checkbox" 
-                  id="receiveComplements"
-                  name="receiveComplements" 
-                  checked={form.receiveComplements} 
-                  onChange={handleChange}
-                  className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-2 focus:ring-purple-500"
-                />
-                <label htmlFor="receiveComplements" className="text-sm font-medium text-slate-700 cursor-pointer">
-                  Produto aceita complementos
-                </label>
-              </div>
-              {form.receiveComplements && (
-                <div className="flex items-center gap-2 mt-2">
-                  <label htmlFor="quantidadeComplementos" className="text-xs font-medium text-slate-700">Quantidade de complementos permitidos:</label>
-                  <input
-                    type="number"
-                    id="quantidadeComplementos"
-                    name="quantidadeComplementos"
-                    min={1}
-                    value={form.quantidadeComplementos}
-                    onChange={handleChange}
-                    className="w-16 px-2 py-1 border border-slate-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                    placeholder="Ex: 3"
-                    title="Informe um valor maior ou igual a 1"
-                  />
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Buttons */}

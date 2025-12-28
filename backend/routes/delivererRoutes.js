@@ -14,16 +14,24 @@ const removePhoneMask = (phone) => {
 router.get('/', authenticateToken, authorize('admin'), async (req, res) => {
   try {
     const deliverers = await prisma.entregador.findMany({
-      orderBy: { criadoEm: 'desc' }
+      orderBy: { criadoEm: 'desc' },
+      include: {
+        pedidos: {
+          where: {
+            status: 'delivered'
+          }
+        }
+      }
     });
 
-    // Transformar campos do português para inglês
+    // Transformar campos do português para inglês e incluir contagem de entregas
     const transformedDeliverers = deliverers.map(deliverer => ({
       id: deliverer.id,
       name: deliverer.nome,
       phone: deliverer.telefone,
       email: deliverer.email,
       isActive: deliverer.ativo,
+      totalDeliveries: deliverer.pedidos.length,
       createdAt: deliverer.criadoEm,
       updatedAt: deliverer.atualizadoEm
     }));
@@ -61,16 +69,24 @@ router.post('/', authenticateToken, authorize('admin'), async (req, res) => {
         nome,
         telefone: telefoneLimpo,
         email: email || null
+      },
+      include: {
+        pedidos: {
+          where: {
+            status: 'delivered'
+          }
+        }
       }
     });
 
-    // Transformar campos do português para inglês
+    // Transformar campos do português para inglês e incluir contagem de entregas
     const transformedDeliverer = {
       id: deliverer.id,
       name: deliverer.nome,
       phone: deliverer.telefone,
       email: deliverer.email,
       isActive: deliverer.ativo,
+      totalDeliveries: deliverer.pedidos.length,
       createdAt: deliverer.criadoEm,
       updatedAt: deliverer.atualizadoEm
     };
@@ -123,16 +139,24 @@ router.put('/:id', authenticateToken, authorize('admin'), async (req, res) => {
         telefone: telefoneLimpo,
         email: email || null,
         ativo: ativo !== undefined ? ativo : true
+      },
+      include: {
+        pedidos: {
+          where: {
+            status: 'delivered'
+          }
+        }
       }
     });
 
-    // Transformar campos do português para inglês
+    // Transformar campos do português para inglês e incluir contagem de entregas
     const transformedDeliverer = {
       id: deliverer.id,
       name: deliverer.nome,
       phone: deliverer.telefone,
       email: deliverer.email,
       isActive: deliverer.ativo,
+      totalDeliveries: deliverer.pedidos.length,
       createdAt: deliverer.criadoEm,
       updatedAt: deliverer.atualizadoEm
     };
@@ -184,16 +208,24 @@ router.patch('/:id/toggle', authenticateToken, authorize('admin'), async (req, r
 
     const updatedDeliverer = await prisma.entregador.update({
       where: { id: parseInt(id) },
-      data: { ativo: !deliverer.ativo }
+      data: { ativo: !deliverer.ativo },
+      include: {
+        pedidos: {
+          where: {
+            status: 'delivered'
+          }
+        }
+      }
     });
 
-    // Transformar campos do português para inglês
+    // Transformar campos do português para inglês e incluir contagem de entregas
     const transformedDeliverer = {
       id: updatedDeliverer.id,
       name: updatedDeliverer.nome,
       phone: updatedDeliverer.telefone,
       email: updatedDeliverer.email,
       isActive: updatedDeliverer.ativo,
+      totalDeliveries: updatedDeliverer.pedidos.length,
       createdAt: updatedDeliverer.criadoEm,
       updatedAt: updatedDeliverer.atualizadoEm
     };

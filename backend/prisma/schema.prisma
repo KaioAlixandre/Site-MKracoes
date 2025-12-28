@@ -127,13 +127,13 @@ model relatorio_vendas_diario {
 }
 
 model entregador {
-  id        Int      @id @default(autoincrement())
-  nome      String   @db.VarChar(100)
-  telefone  String   @db.VarChar(20)
-  email     String?  @db.VarChar(100)
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
-  pedidos   pedido[]
+  id            Int      @id @default(autoincrement())
+  nome          String   @db.VarChar(100)
+  telefone      String   @db.VarChar(20)
+  email         String?  @db.VarChar(100)
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  pedidos       pedido[]
   
   @@map("entregadores")
 }

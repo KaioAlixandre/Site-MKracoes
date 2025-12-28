@@ -81,7 +81,7 @@ const Admin: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Verificando permissões...</p>
         </div>
       </div>
@@ -260,24 +260,24 @@ const performConfirmDelivery = async (): Promise<void> => {
   return (
     <div className="flex h-screen bg-slate-100 font-inter">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-slate-800 text-white flex items-center justify-between px-4 z-50">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-orange-600 text-white flex items-center justify-between px-4 z-50">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Store className="w-5 h-5" />
           <span>MK Raçoes</span>
         </h1>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+          className="p-2 hover:bg-orange-700 rounded-lg transition-colors"
         >
           {isMobileMenuOpen ? <X className="w-6 h-6" /> : <LayoutDashboard className="w-6 h-6" />}
         </button>
       </div>
 
       {/* Sidebar */}
-      <aside className={`w-64 bg-slate-800 text-slate-300 flex flex-col fixed h-full z-40 transition-transform duration-300 ${
+      <aside className={`w-64 bg-orange-600 text-orange-50 flex flex-col fixed h-full z-40 transition-transform duration-300 ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0`}>
-        <div className="h-20 flex items-center justify-center border-b border-slate-700">
+        <div className="h-20 flex items-center justify-center border-b border-green-700 bg-green-600">
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Store />
             <span>MK Raçoes</span>
@@ -291,8 +291,8 @@ const performConfirmDelivery = async (): Promise<void> => {
                 setActivePage(page.id);
                 setIsMobileMenuOpen(false);
               }}
-              className={`sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg transition-all hover:bg-slate-700 w-full text-left ${
-                activePage === page.id ? 'active bg-indigo-600 text-white shadow' : ''
+              className={`sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg transition-all hover:bg-orange-700 w-full text-left ${
+                activePage === page.id ? 'active bg-green-600 text-white shadow' : ''
               }`}
             >
               <span className="w-5 h-5">{page.icon}</span>
@@ -300,13 +300,13 @@ const performConfirmDelivery = async (): Promise<void> => {
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-4 border-t border-green-700 bg-green-600">
           <button 
             onClick={() => {
               logout();
               navigate('/home');
             }}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-red-400 hover:bg-red-900/50 w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-red-300 hover:bg-red-900/50 w-full"
           >
             <LogOut />
             <span className="font-medium">Sair</span>
@@ -436,7 +436,7 @@ const performConfirmDelivery = async (): Promise<void> => {
 
       <style>{`
         .sidebar-item.active {
-          background-color: #4f46e5;
+          background-color: #16a34a;
           color: white;
           box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         }
@@ -449,9 +449,9 @@ const performConfirmDelivery = async (): Promise<void> => {
         .status-completed { background-color: #dcfce7; color: #166534; }
         .status-canceled { background-color: #fee2e2; color: #991b1b; }
         ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        ::-webkit-scrollbar-track { background: #ea580c; }
+        ::-webkit-scrollbar-thumb { background: #c2410c; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9a3412; }
       `}</style>
     </div>
   );
